@@ -11,8 +11,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 user_states = {}
-coins_cache = {}
-cache_timestamp = 0
 
 class UltimateCoinFinder:
     def __init__(self):
@@ -101,6 +99,7 @@ async def predict_handler(message: types.Message):
         current = market_data['current_price']['usd']
         ath = market_data['ath']['usd']
         change_24h = market_data.get('price_change_percentage_24h', 0)
+        rank = coin_data.get('market_cap_rank', 'N/A')
 
         sentiment = 0.5
         if change_24h > 15:
@@ -123,17 +122,23 @@ async def predict_handler(message: types.Message):
             sentiment = max(sentiment, 0.5)
 
         user_states[message.from_user.id] = {
-            'coin_id': coin_id,
             'coin_name': search_result['name'],
+            'coin_symbol': search_result['symbol'],
             'current': current,
             'ath': ath,
-            'sentiment': sentiment
+            'sentiment': sentiment,
+            'rank': rank
         }
 
         await message.reply(
-            f"{search_result['name']} (ATH: ${ath}, Current: ${current})\n"
-            f"Estimated sentiment: {sentiment:.2f}\n"
-            "Now, send me the cycle strength factor (e.g., 1.5)"
+            f"🎯 {search_result['name']} ({search_result['symbol'].upper()}) PREDICTION\n\n"
+            f"📊 Current Data:\n"
+            f"• Current Price: ${current:.4f}\n"
+            f"• All-Time High: ${ath:.2f}\n"
+            f"• Market Rank: #{rank}\n\n"
+            f"🧮 Calculation:\n"
+            f"• Sentiment: {sentiment:.3f}\n"
+            f"• Enter cycle strength factor (e.g., 1.5)"
         )
     except Exception as e:
         logger.error(f"Error in predict: {e}")
@@ -150,11 +155,38 @@ async def handle_message(message: types.Message):
         data = user_states.pop(user_id)
         bmp = data['ath'] * data['sentiment'] * strength
         roi = bmp / data['current']
+        roi_percent = (roi - 1) * 100
+
+        if roi >= 100:
+            assessment = "🚀 MOONSHOT POTENTIAL"
+        elif roi >= 50:
+            assessment = "🌟 EXTREME UPSIDE"
+        elif roi >= 20:
+            assessment = "📈 VERY BULLISH"
+        elif roi >= 10:
+            assessment = "💪 STRONG UPSIDE"
+        elif roi >= 5:
+            assessment = "📊 MODERATE UPSIDE"
+        elif roi >= 2:
+            assessment = "📉 LIMITED UPSIDE"
+        else:
+            assessment = "⚠️ BEARISH OUTLOOK"
 
         await message.reply(
-            f"{data['coin_name']} Bull Market Prediction:\n"
-            f"Target Price: ${bmp:.4f}\n"
-            f"Potential ROI: {roi:.2f}x"
+            f"🎯 {data['coin_name']} ({data['coin_symbol'].upper()}) PREDICTION\n\n"
+            f"📊 Current Data:\n"
+            f"• Current Price: ${data['current']:.4f}\n"
+            f"• All-Time High: ${data['ath']:.2f}\n"
+            f"• Market Rank: #{data['rank']}\n\n"
+            f"🧮 Calculation:\n"
+            f"• Sentiment: {data['sentiment']:.3f}\n"
+            f"• Strength: {strength:.1f}\n\n"
+            f"🚀 BULL MARKET PREDICTION:\n"
+            f"• Target Price: ${bmp:.2f}\n"
+            f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)\n\n"
+            f"📈 Assessment: {assessment}\n\n"
+            f"⚠️ This is not financial advice. Always do your own research before investing.",
+            parse_mode='Markdown'
         )
     except Exception as e:
         logger.error(f"Error calculating BMP: {e}")
@@ -170,3 +202,4 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+
