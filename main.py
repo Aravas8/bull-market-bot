@@ -52,8 +52,8 @@ class UltimateCoinFinder:
 finder = UltimateCoinFinder()
 
 async def start_handler(message: types.Message):
-    await message.reply("Welcome to the Bull Market Predictor Bot!\nUse /predict \<coin name or symbol\> to start.")
-Use /predict <coin name or symbol> to start.")
+await message.reply("Welcome to the Bull Market Predictor Bot!\nUse /predict <coin name or symbol> to start.")
+
 
 async def predict_handler(message: types.Message):
     user_id = message.from_user.id
