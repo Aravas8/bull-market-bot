@@ -164,26 +164,23 @@ async def handle_coin_selection(message: types.Message):
     f"⚠️ This is not financial advice. Always do your own research before investing.",
     parse_mode='Markdown'
 )
-            f"🧮 Calculation:
-"
-            f"• Sentiment: {sentiment:.3f}
-"
-            f"• Strength (default): {strength:.1f}
+         await message.reply(
+    f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION\\n\\n"
+    f"📊 Current Data:\\n"
+    f"• Current Price: ${current:.4f}\\n"
+    f"• All-Time High: ${ath:.2f}\\n"
+    f"• Market Rank: #{rank}\\n\\n"
+    f"🧮 Calculation:\\n"
+    f"• Sentiment: {sentiment:.3f}\\n"
+    f"• Strength (default): {strength:.1f}\\n\\n"
+    f"🚀 BULL MARKET PREDICTION:\\n"
+    f"• Target Price: ${bmp:.2f}\\n"
+    f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)\\n\\n"
+    f"📈 Assessment: {assessment}\\n\\n"
+    f"⚠️ This is not financial advice. Always do your own research before investing.",
+    parse_mode='Markdown'
+)
 
-"
-            f"🚀 BULL MARKET PREDICTION:
-"
-            f"• Target Price: ${bmp:.2f}
-"
-            f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)
-
-"
-            f"📈 Assessment: {assessment}
-
-"
-            f"⚠️ This is not financial advice. Always do your own research before investing.",
-            parse_mode='Markdown'
-        )
 
     except Exception as e:
         logger.error(f"Error during coin selection or prediction: {e}")
