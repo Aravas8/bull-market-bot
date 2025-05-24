@@ -147,8 +147,7 @@ async def handle_coin_selection(message: types.Message):
         else:
             assessment = "⚠️ BEARISH OUTLOOK"
 
-        await message.reply(
-   await message.reply(
+       await message.reply(
     f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION\n\n"
     f"📊 Current Data:\n"
     f"• Current Price: ${current:.4f}\n"
