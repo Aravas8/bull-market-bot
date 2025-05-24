@@ -121,7 +121,11 @@ async def handle_coin_selection(message: types.Message):
             await message.reply("❌ Error fetching data. Try again later.")
             return
 
-        market_data = coin_data['market_data']
+        market_data = coin_data.get('market_data')
+        if not market_data or 'current_price' not in market_data or 'usd' not in market_data['current_price']:
+            await message.reply("❌ No reliable market data available for this coin. Try another.")
+            return
+
         current = market_data['current_price']['usd']
         ath = market_data['ath']['usd']
         change_24h = market_data.get('price_change_percentage_24h', 0)
