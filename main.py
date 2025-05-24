@@ -67,6 +67,29 @@ class UltimateCoinFinder:
             logger.error(f"Data fetch error for {coin_id}: {e}")
             return None
 
+    async def get_global_metrics(self):
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/global") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data['data']
+        except Exception as e:
+            logger.error(f"Error fetching global metrics: {e}")
+            return None
+
+    async def get_eth_btc_ratio(self):
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/simple/price?ids=ethereum,bitcoin&vs_currencies=btc") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    eth_btc = data['ethereum']['btc']
+                    return eth_btc
+        except Exception as e:
+            logger.error(f"Error fetching ETH/BTC ratio: {e}")
+            return None
+
     async def close(self):
         if self.session and not self.session.closed:
             await self.session.close()
@@ -121,40 +144,21 @@ async def predict_handler(message: types.Message):
         elif ath_distance > 0.2:
             sentiment = max(sentiment, 0.5)
 
-        user_states[message.from_user.id] = {
-            'coin_name': search_result['name'],
-            'coin_symbol': search_result['symbol'],
-            'current': current,
-            'ath': ath,
-            'sentiment': sentiment,
-            'rank': rank
-        }
+        global_data = await finder.get_global_metrics()
+        eth_btc_ratio = await finder.get_eth_btc_ratio()
+        btc_dominance = global_data['market_cap_percentage']['btc'] if global_data else 50.0
 
-        await message.reply(
-            f"🎯 {search_result['name']} ({search_result['symbol'].upper()}) PREDICTION\n\n"
-            f"📊 Current Data:\n"
-            f"• Current Price: ${current:.4f}\n"
-            f"• All-Time High: ${ath:.2f}\n"
-            f"• Market Rank: #{rank}\n\n"
-            f"🧮 Calculation:\n"
-            f"• Sentiment: {sentiment:.3f}\n"
-            f"• Enter cycle strength factor (e.g., 1.5)"
-        )
-    except Exception as e:
-        logger.error(f"Error in predict: {e}")
-        await message.reply("Unexpected error occurred.")
+        if btc_dominance < 42 and eth_btc_ratio > 0.065:
+            strength = 3.0
+        elif btc_dominance < 45:
+            strength = 2.0
+        elif btc_dominance < 50:
+            strength = 1.5
+        else:
+            strength = 1.1
 
-async def handle_message(message: types.Message):
-    user_id = message.from_user.id
-    if user_id not in user_states:
-        await message.reply("Please use /predict <coin> first.")
-        return
-
-    try:
-        strength = float(message.text.strip())
-        data = user_states.pop(user_id)
-        bmp = data['ath'] * data['sentiment'] * strength
-        roi = bmp / data['current']
+        bmp = ath * sentiment * strength
+        roi = bmp / current
         roi_percent = (roi - 1) * 100
 
         if roi >= 100:
@@ -173,14 +177,14 @@ async def handle_message(message: types.Message):
             assessment = "⚠️ BEARISH OUTLOOK"
 
         await message.reply(
-            f"🎯 {data['coin_name']} ({data['coin_symbol'].upper()}) PREDICTION\n\n"
+            f"🎯 {search_result['name']} ({search_result['symbol'].upper()}) PREDICTION\n\n"
             f"📊 Current Data:\n"
-            f"• Current Price: ${data['current']:.4f}\n"
-            f"• All-Time High: ${data['ath']:.2f}\n"
-            f"• Market Rank: #{data['rank']}\n\n"
+            f"• Current Price: ${current:.4f}\n"
+            f"• All-Time High: ${ath:.2f}\n"
+            f"• Market Rank: #{rank}\n\n"
             f"🧮 Calculation:\n"
-            f"• Sentiment: {data['sentiment']:.3f}\n"
-            f"• Strength: {strength:.1f}\n\n"
+            f"• Sentiment: {sentiment:.3f}\n"
+            f"• Strength (auto): {strength:.2f} (BTC Dominance: {btc_dominance:.1f}%, ETH/BTC: {eth_btc_ratio:.5f})\n\n"
             f"🚀 BULL MARKET PREDICTION:\n"
             f"• Target Price: ${bmp:.2f}\n"
             f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)\n\n"
@@ -189,17 +193,15 @@ async def handle_message(message: types.Message):
             parse_mode='Markdown'
         )
     except Exception as e:
-        logger.error(f"Error calculating BMP: {e}")
-        await message.reply("Invalid input. Please enter a valid number.")
+        logger.error(f"Error in predict handler: {e}")
+        await message.reply("Error during prediction. Try again later.")
 
 async def main():
     bot = Bot(token=API_TOKEN)
     dp = Dispatcher()
     dp.message.register(start_handler, Command('start'))
     dp.message.register(predict_handler, Command('predict'))
-    dp.message.register(handle_message)
     await dp.start_polling(bot, skip_updates=True)
 
 if __name__ == '__main__':
     asyncio.run(main())
-
