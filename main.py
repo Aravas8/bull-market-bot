@@ -1,3 +1,4 @@
+
 import logging
 import aiohttp
 import asyncio
@@ -45,6 +46,28 @@ class UltimateCoinFinder:
             logger.error(f"Error fetching coin data for {coin_id}: {e}")
         return None
 
+    async def get_global_metrics(self):
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/global") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data['data']
+        except Exception as e:
+            logger.error(f"Error fetching global metrics: {e}")
+            return None
+
+    async def get_eth_btc_ratio(self):
+        try:
+            session = await self.get_session()
+            async with session.get(f"{self.base_url}/simple/price?ids=ethereum,bitcoin&vs_currencies=btc") as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data['ethereum']['btc']
+        except Exception as e:
+            logger.error(f"Error fetching ETH/BTC ratio: {e}")
+            return None
+
     async def close(self):
         if self.session and not self.session.closed:
             await self.session.close()
@@ -52,8 +75,8 @@ class UltimateCoinFinder:
 finder = UltimateCoinFinder()
 
 async def start_handler(message: types.Message):
-    await message.reply("Welcome to the Bull Market Predictor Bot!\nUse /predict <coin name or symbol> to start.") 
-
+    await message.reply("Welcome to the Bull Market Predictor Bot!
+Use /predict <coin name or symbol> to start.")
 
 async def predict_handler(message: types.Message):
     user_id = message.from_user.id
@@ -72,11 +95,13 @@ async def predict_handler(message: types.Message):
     top_matches = matches[:3]
     coin_selection_states[user_id] = top_matches
 
-reply_text = "🔍 Multiple matches found. Reply with a number:\n\n"
-for i, coin in enumerate(top_matches, start=1):
-    reply_text += f"{i}. {coin['name']} ({coin['symbol'].upper()}) — Rank: #{coin.get('market_cap_rank', 'N/A')}\n"
-await message.reply(reply_text)
+    reply_text = "🔍 Multiple matches found. Reply with a number:
 
+"
+    for i, coin in enumerate(top_matches, start=1):
+        reply_text += f"{i}. {coin['name']} ({coin['symbol'].upper()}) — Rank: #{coin.get('market_cap_rank', 'N/A')}
+"
+    await message.reply(reply_text)
 
 async def handle_coin_selection(message: types.Message):
     user_id = message.from_user.id
@@ -127,7 +152,19 @@ async def handle_coin_selection(message: types.Message):
         elif ath_distance > 0.2:
             sentiment = max(sentiment, 0.5)
 
-        strength = 1.5
+        global_data = await finder.get_global_metrics()
+        eth_btc_ratio = await finder.get_eth_btc_ratio()
+        btc_dominance = global_data['market_cap_percentage']['btc'] if global_data else 50.0
+
+        if btc_dominance < 42 and eth_btc_ratio > 0.065:
+            strength = 3.0
+        elif btc_dominance < 45:
+            strength = 2.0
+        elif btc_dominance < 50:
+            strength = 1.5
+        else:
+            strength = 1.1
+
         bmp = ath * sentiment * strength
         roi = bmp / current
         roi_percent = (roi - 1) * 100
@@ -148,18 +185,35 @@ async def handle_coin_selection(message: types.Message):
             assessment = "⚠️ BEARISH OUTLOOK"
 
         await message.reply(
-            f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION\n\n"
-            f"📊 Current Data:\n"
-            f"• Current Price: ${current:.4f}\n"
-            f"• All-Time High: ${ath:.2f}\n"
-            f"• Market Rank: #{rank}\n\n"
-            f"🧮 Calculation:\n"
-            f"• Sentiment: {sentiment:.3f}\n"
-            f"• Strength (default): {strength:.1f}\n\n"
-            f"🚀 BULL MARKET PREDICTION:\n"
-            f"• Target Price: ${bmp:.2f}\n"
-            f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)\n\n"
-            f"📈 Assessment: {assessment}\n\n"
+            f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION
+
+"
+            f"📊 Current Data:
+"
+            f"• Current Price: ${current:.4f}
+"
+            f"• All-Time High: ${ath:.2f}
+"
+            f"• Market Rank: #{rank}
+
+"
+            f"🧮 Calculation:
+"
+            f"• Sentiment: {sentiment:.3f}
+"
+            f"• Strength (auto): {strength:.2f} (BTC Dominance: {btc_dominance:.1f}%, ETH/BTC: {eth_btc_ratio:.5f})
+
+"
+            f"🚀 BULL MARKET PREDICTION:
+"
+            f"• Target Price: ${bmp:.2f}
+"
+            f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)
+
+"
+            f"📈 Assessment: {assessment}
+
+"
             f"⚠️ This is not financial advice. Always do your own research before investing.",
             parse_mode='Markdown'
         )
