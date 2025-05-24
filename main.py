@@ -148,18 +148,22 @@ async def handle_coin_selection(message: types.Message):
             assessment = "⚠️ BEARISH OUTLOOK"
 
         await message.reply(
-            f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION
-
-"
-            f"📊 Current Data:
-"
-            f"• Current Price: ${current:.4f}
-"
-            f"• All-Time High: ${ath:.2f}
-"
-            f"• Market Rank: #{rank}
-
-"
+   await message.reply(
+    f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION\n\n"
+    f"📊 Current Data:\n"
+    f"• Current Price: ${current:.4f}\n"
+    f"• All-Time High: ${ath:.2f}\n"
+    f"• Market Rank: #{rank}\n\n"
+    f"🧮 Calculation:\n"
+    f"• Sentiment: {sentiment:.3f}\n"
+    f"• Strength (default): {strength:.1f}\n\n"
+    f"🚀 BULL MARKET PREDICTION:\n"
+    f"• Target Price: ${bmp:.2f}\n"
+    f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)\n\n"
+    f"📈 Assessment: {assessment}\n\n"
+    f"⚠️ This is not financial advice. Always do your own research before investing.",
+    parse_mode='Markdown'
+)
             f"🧮 Calculation:
 "
             f"• Sentiment: {sentiment:.3f}
