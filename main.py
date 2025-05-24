@@ -115,17 +115,22 @@ async def handle_coin_selection(message: types.Message):
 
         selected_coin = coins[choice]
         coin_id = selected_coin['id']
+
         coin_data = await finder.get_coin_data(coin_id)
-
         if not coin_data:
-            await message.reply("❌ Error fetching data. Try again later.")
-            return
+            await asyncio.sleep(2)
+            coin_data = await finder.get_coin_data(coin_id)
 
-        market_data = coin_data.get('market_data')
-        if not market_data or 'current_price' not in market_data or 'usd' not in market_data['current_price']:
+        if (
+            not coin_data
+            or 'market_data' not in coin_data
+            or 'current_price' not in coin_data['market_data']
+            or 'usd' not in coin_data['market_data']['current_price']
+        ):
             await message.reply("❌ No reliable market data available for this coin. Try another.")
             return
 
+        market_data = coin_data['market_data']
         current = market_data['current_price']['usd']
         ath = market_data['ath']['usd']
         change_24h = market_data.get('price_change_percentage_24h', 0)
