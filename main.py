@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 user_states = {}
+coin_selection_states = {}
 
 class UltimateCoinFinder:
     def __init__(self):
@@ -23,72 +24,26 @@ class UltimateCoinFinder:
             self.session = aiohttp.ClientSession(timeout=timeout)
         return self.session
 
-    async def search_coin(self, query: str):
+    async def search_coin_multiple(self, query: str):
         try:
             session = await self.get_session()
-            search_url = f"{self.base_url}/search?query={query}"
-            async with session.get(search_url) as resp:
+            async with session.get(f"{self.base_url}/search?query={query}") as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    coins = data.get('coins', [])
-                    if coins:
-                        best_match = coins[0]
-                        return {
-                            'found': True,
-                            'coin_id': best_match['id'],
-                            'name': best_match['name'],
-                            'symbol': best_match['symbol'],
-                            'rank': best_match.get('market_cap_rank', 999)
-                        }
-            async with session.get(f"{self.base_url}/coins/{query.lower()}") as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return {
-                        'found': True,
-                        'coin_id': data['id'],
-                        'name': data['name'],
-                        'symbol': data['symbol'],
-                        'rank': data.get('market_cap_rank', 999)
-                    }
-            return {'found': False, 'error': f'No cryptocurrency found for "{query}"'}
+                    return data.get('coins', [])
         except Exception as e:
-            logger.error(f"Search error for {query}: {e}")
-            return {'found': False, 'error': 'Search temporarily unavailable'}
+            logger.error(f"Error searching for coins: {e}")
+        return []
 
     async def get_coin_data(self, coin_id: str):
         try:
             session = await self.get_session()
-            url = f"{self.base_url}/coins/{coin_id}"
-            async with session.get(url) as resp:
+            async with session.get(f"{self.base_url}/coins/{coin_id}") as resp:
                 if resp.status == 200:
                     return await resp.json()
-                return None
         except Exception as e:
-            logger.error(f"Data fetch error for {coin_id}: {e}")
-            return None
-
-    async def get_global_metrics(self):
-        try:
-            session = await self.get_session()
-            async with session.get(f"{self.base_url}/global") as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data['data']
-        except Exception as e:
-            logger.error(f"Error fetching global metrics: {e}")
-            return None
-
-    async def get_eth_btc_ratio(self):
-        try:
-            session = await self.get_session()
-            async with session.get(f"{self.base_url}/simple/price?ids=ethereum,bitcoin&vs_currencies=btc") as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    eth_btc = data['ethereum']['btc']
-                    return eth_btc
-        except Exception as e:
-            logger.error(f"Error fetching ETH/BTC ratio: {e}")
-            return None
+            logger.error(f"Error fetching coin data for {coin_id}: {e}")
+        return None
 
     async def close(self):
         if self.session and not self.session.closed:
@@ -97,25 +52,56 @@ class UltimateCoinFinder:
 finder = UltimateCoinFinder()
 
 async def start_handler(message: types.Message):
-    await message.reply("Welcome to the Bull Market Predictor Bot! Use /predict <coin> to begin.")
+    await message.reply("Welcome to the Bull Market Predictor Bot!
+Use /predict <coin name or symbol> to start.")
 
 async def predict_handler(message: types.Message):
+    user_id = message.from_user.id
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply("Usage: /predict <coin>")
+        return
+
+    query = parts[1].strip()
+    matches = await finder.search_coin_multiple(query)
+
+    if not matches:
+        await message.reply("❌ No coins found. Try another name or symbol.")
+        return
+
+    top_matches = matches[:3]
+    coin_selection_states[user_id] = top_matches
+
+    reply_text = "🔍 Multiple matches found. Reply with a number:
+
+"
+    for i, coin in enumerate(top_matches, start=1):
+        reply_text += f"{i}. {coin['name']} ({coin['symbol'].upper()}) — Rank: #{coin.get('market_cap_rank', 'N/A')}
+"
+
+    await message.reply(reply_text)
+
+async def handle_coin_selection(message: types.Message):
+    user_id = message.from_user.id
+
+    if user_id not in coin_selection_states:
+        await message.reply("Type /predict <coin> to begin.")
+        return
+
     try:
-        parts = message.text.split()
-        if len(parts) < 2:
-            await message.reply("Usage: /predict <coin>")
+        choice = int(message.text.strip()) - 1
+        coins = coin_selection_states.pop(user_id)
+
+        if not (0 <= choice < len(coins)):
+            await message.reply("Invalid selection. Type /predict again.")
             return
 
-        search_query = parts[1]
-        search_result = await finder.search_coin(search_query)
-        if not search_result['found']:
-            await message.reply(search_result['error'])
-            return
-
-        coin_id = search_result['coin_id']
+        selected_coin = coins[choice]
+        coin_id = selected_coin['id']
         coin_data = await finder.get_coin_data(coin_id)
+
         if not coin_data:
-            await message.reply("Error fetching data.")
+            await message.reply("❌ Error fetching data. Try again later.")
             return
 
         market_data = coin_data['market_data']
@@ -144,19 +130,7 @@ async def predict_handler(message: types.Message):
         elif ath_distance > 0.2:
             sentiment = max(sentiment, 0.5)
 
-        global_data = await finder.get_global_metrics()
-        eth_btc_ratio = await finder.get_eth_btc_ratio()
-        btc_dominance = global_data['market_cap_percentage']['btc'] if global_data else 50.0
-
-        if btc_dominance < 42 and eth_btc_ratio > 0.065:
-            strength = 3.0
-        elif btc_dominance < 45:
-            strength = 2.0
-        elif btc_dominance < 50:
-            strength = 1.5
-        else:
-            strength = 1.1
-
+        strength = 1.5
         bmp = ath * sentiment * strength
         roi = bmp / current
         roi_percent = (roi - 1) * 100
@@ -177,31 +151,50 @@ async def predict_handler(message: types.Message):
             assessment = "⚠️ BEARISH OUTLOOK"
 
         await message.reply(
-            f"🎯 {search_result['name']} ({search_result['symbol'].upper()}) PREDICTION\n\n"
-            f"📊 Current Data:\n"
-            f"• Current Price: ${current:.4f}\n"
-            f"• All-Time High: ${ath:.2f}\n"
-            f"• Market Rank: #{rank}\n\n"
-            f"🧮 Calculation:\n"
-            f"• Sentiment: {sentiment:.3f}\n"
-            f"• Strength (auto): {strength:.2f} (BTC Dominance: {btc_dominance:.1f}%, ETH/BTC: {eth_btc_ratio:.5f})\n\n"
-            f"🚀 BULL MARKET PREDICTION:\n"
-            f"• Target Price: ${bmp:.2f}\n"
-            f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)\n\n"
-            f"📈 Assessment: {assessment}\n\n"
+            f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION
+
+"
+            f"📊 Current Data:
+"
+            f"• Current Price: ${current:.4f}
+"
+            f"• All-Time High: ${ath:.2f}
+"
+            f"• Market Rank: #{rank}
+
+"
+            f"🧮 Calculation:
+"
+            f"• Sentiment: {sentiment:.3f}
+"
+            f"• Strength (default): {strength:.1f}
+
+"
+            f"🚀 BULL MARKET PREDICTION:
+"
+            f"• Target Price: ${bmp:.2f}
+"
+            f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)
+
+"
+            f"📈 Assessment: {assessment}
+
+"
             f"⚠️ This is not financial advice. Always do your own research before investing.",
             parse_mode='Markdown'
         )
+
     except Exception as e:
-        logger.error(f"Error in predict handler: {e}")
-        await message.reply("Error during prediction. Try again later.")
+        logger.error(f"Error during coin selection or prediction: {e}")
+        await message.reply("❌ Invalid input or error occurred. Try /predict again.")
 
 async def main():
     bot = Bot(token=API_TOKEN)
     dp = Dispatcher()
-    dp.message.register(start_handler, Command('start'))
-    dp.message.register(predict_handler, Command('predict'))
+    dp.message.register(start_handler, Command("start"))
+    dp.message.register(predict_handler, Command("predict"))
+    dp.message.register(handle_coin_selection)
     await dp.start_polling(bot, skip_updates=True)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())
