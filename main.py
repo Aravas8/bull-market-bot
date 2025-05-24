@@ -73,12 +73,10 @@ async def predict_handler(message: types.Message):
     coin_selection_states[user_id] = top_matches
 
 reply_text = "🔍 Multiple matches found. Reply with a number:\n\n"
+for i, coin in enumerate(top_matches, start=1):
+    reply_text += f"{i}. {coin['name']} ({coin['symbol'].upper()}) — Rank: #{coin.get('market_cap_rank', 'N/A')}\n"
+await message.reply(reply_text)
 
-    for i, coin in enumerate(top_matches, start=1):
-        reply_text += f"{i}. {coin['name']} ({coin['symbol'].upper()}) — Rank: #{coin.get('market_cap_rank', 'N/A')}
-"
-
-    await message.reply(reply_text)
 
 async def handle_coin_selection(message: types.Message):
     user_id = message.from_user.id
