@@ -82,25 +82,22 @@ async def handle_coin_selection(message: types.Message):
     user_id = message.from_user.id
 
     if user_id not in coin_selection_states:
-        await message.reply("Type /predict <coin> to begin.")
-        return
-
-    try:
-        choice = int(message.text.strip()) - 1
-        coins = coin_selection_states.pop(user_id)
-
-        if not (0 <= choice < len(coins)):
-            await message.reply("Invalid selection. Type /predict again.")
-            return
-
-        selected_coin = coins[choice]
-        coin_id = selected_coin['id']
-        coin_data = await finder.get_coin_data(coin_id)
-
-        if not coin_data:
-            await message.reply("❌ Error fetching data. Try again later.")
-            return
-
+                await message.reply(
+            f"🎯 {selected_coin['name']} ({selected_coin['symbol'].upper()}) PREDICTION\n\n"
+            f"📊 Current Data:\n"
+            f"• Current Price: ${current:.4f}\n"
+            f"• All-Time High: ${ath:.2f}\n"
+            f"• Market Rank: #{rank}\n\n"
+            f"🧮 Calculation:\n"
+            f"• Sentiment: {sentiment:.3f}\n"
+            f"• Strength (default): {strength:.1f}\n\n"
+            f"🚀 BULL MARKET PREDICTION:\n"
+            f"• Target Price: ${bmp:.2f}\n"
+            f"• Potential ROI: {roi:.1f}x ({roi_percent:.0f}% gain)\n\n"
+            f"📈 Assessment: {assessment}\n\n"
+            f"⚠️ This is not financial advice. Always do your own research before investing.",
+            parse_mode='Markdown'
+        )
         market_data = coin_data['market_data']
         current = market_data['current_price']['usd']
         ath = market_data['ath']['usd']
